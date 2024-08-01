@@ -154,6 +154,7 @@ jobs:
           adb push "$test" /data/local/tmp/
           adb shell chmod +x /data/local/tmp/$(basename "$test")
           adb shell /data/local/tmp/$(basename "$test") || any_failures=1
+          echo "any_failures=$any_failures"
         done
 
         exit $any_failures' > run_tests_on_emulator.sh && chmod +x run_tests_on_emulator.sh
@@ -170,11 +171,3 @@ jobs:
         force-avd-creation: true
         emulator-boot-timeout: 600
         script: ./run_tests_on_emulator.sh
-
-    - name: Dump Logcat to Check for Errors
-      if: failure()
-      run: adb logcat -d
-
-    - name: Fail if Tests Failed
-      run: exit 1
-      if: failure()
