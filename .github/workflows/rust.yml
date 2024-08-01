@@ -116,7 +116,7 @@ jobs:
       uses: actions/setup-java@v3
       with:
         distribution: 'zulu'
-        java-version: '11'
+        java-version: '17' # Install Java 17 to be compatible with the Android SDK command-line tools
 
     - name: Install Android SDK
       uses: android-actions/setup-android@v2
