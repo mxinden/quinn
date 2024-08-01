@@ -150,7 +150,7 @@ jobs:
 
         any_failures=0
 
-        for test in $(find target/${{ matrix.target }}/debug/deps/ -type f -executable -name "*-*"); do
+        for test in $(find target/${{ matrix.target }}/debug/deps/ -type f -executable ! -name "*.so" -name "*-*"); do
           adb push "$test" /data/local/tmp/
           adb shell chmod +x /data/local/tmp/$(basename "$test")
           adb shell /data/local/tmp/$(basename "$test") || any_failures=1
@@ -166,8 +166,4 @@ jobs:
         target: google_apis
         arch: ${{ matrix.emulator-arch }}
         profile: Nexus 6
-        emulator-options: "-no-window -no-audio"
-        avd-name: test
-        force-avd-creation: true
-        emulator-boot-timeout: 600
         script: ./run_tests_on_emulator.sh
