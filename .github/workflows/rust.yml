@@ -100,12 +100,16 @@ jobs:
         include:
           - target: aarch64-linux-android
             emulator-arch: arm64-v8a
+            api-level: 30
           - target: armv7-linux-androideabi
             emulator-arch: armeabi-v7a
+            api-level: 25
           - target: x86_64-linux-android
             emulator-arch: x86_64
+            api-level: 30
           - target: i686-linux-android
             emulator-arch: x86
+            api-level: 30
 
     steps:
     - name: Checkout code
@@ -165,7 +169,7 @@ jobs:
     - name: Set up Android Emulator and run tests
       uses: reactivecircus/android-emulator-runner@v2
       with:
-        api-level: 30
+        api-level: ${{ matrix.api-level }}
         target: default
         arch: ${{ matrix.emulator-arch }}
         profile: Nexus 6
