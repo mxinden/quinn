@@ -117,7 +117,7 @@ jobs:
       uses: android-actions/setup-android@v2
 
     - name: Install Android NDK
-      run: sdkmanager --install "ndk;25.2.9519653"
+      run: sdkmanager --install "ndk;22.1.7171670"
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
@@ -162,4 +162,5 @@ jobs:
         api-level: 29
         arch: ${{ matrix.emulator-arch }}
         profile: pixel_2
+        ndk: 22.1.7171670
         script: ./run_tests_on_emulator.sh
