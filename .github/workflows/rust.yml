@@ -91,3 +91,77 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: EmbarkStudios/cargo-deny-action@v1
+
+  test-android:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Install JDK
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'zulu'
+        java-version: '11'
+
+    - name: Install Android SDK
+      uses: android-actions/setup-android@v2
+      with:
+        api-level: 30
+        build-tools: 30.0.3
+
+    - name: Install Android NDK
+      run: sdkmanager --install "ndk;25.2.9519653"
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+        components: rustfmt, clippy
+        target: x86_64-linux-android
+
+    - name: Install cargo-ndk
+      run: cargo install cargo-ndk
+
+    - name: Build unit tests for Android
+      run: cargo ndk -t x86_64-linux-android test --no-run
+
+    - name: Enable KVM group perms
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+
+    - name: Create emulator script
+      run: |
+        echo '#!/bin/bash
+
+        set -e
+
+        adb wait-for-device
+        while [[ -z "$(adb shell getprop sys.boot_completed | tr -d '\r')" ]]; do sleep 1; done
+
+        any_failures=0
+
+        for test in $(find target/x86_64-linux-android/debug/deps/ -type f -executable -name "*-*"); do
+          adb push "$test" /data/local/tmp/
+          adb shell chmod +x /data/local/tmp/$(basename "$test")
+          adb shell /data/local/tmp/$(basename "$test") || any_failures=1
+        done
+
+        exit $any_failures' > run_tests_on_emulator.sh && chmod +x run_tests_on_emulator.sh
+
+    - name: Set up Android Emulator and run tests
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: 30
+        target: default
+        arch: x86_64
+        profile: Nexus 6
+        emulator-options: "-no-window -no-audio"
+        avd-name: test
+        force-avd-creation: true
+        emulator-boot-timeout: 600
+        script: ./run_tests_on_emulator.sh
