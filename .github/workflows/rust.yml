@@ -106,6 +106,8 @@ jobs:
             runs-on: ubuntu-latest
             emulator-arch: x86
 
+    runs-on: ${{ matrix.runs-on }}
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
