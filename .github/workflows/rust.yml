@@ -170,3 +170,11 @@ jobs:
         force-avd-creation: true
         emulator-boot-timeout: 600
         script: ./run_tests_on_emulator.sh
+
+    - name: Dump Logcat to Check for Errors
+      if: failure()
+      run: adb logcat -d
+
+    - name: Fail if Tests Failed
+      run: exit 1
+      if: failure()
