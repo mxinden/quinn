@@ -101,9 +101,6 @@ jobs:
           - target: aarch64-linux-android
             emulator-arch: arm64-v8a
             api-level: 30
-          - target: armv7-linux-androideabi
-            emulator-arch: armeabi-v7a
-            api-level: 25
           - target: x86_64-linux-android
             emulator-arch: x86_64
             api-level: 30
