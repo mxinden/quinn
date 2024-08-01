@@ -161,4 +161,5 @@ jobs:
       with:
         api-level: 29
         arch: ${{ matrix.emulator-arch }}
+        profile: pixel_2
         script: ./run_tests_on_emulator.sh
