@@ -97,11 +97,6 @@ jobs:
 
     strategy:
       matrix:
-        target:
-          - aarch64-linux-android
-          - armv7-linux-androideabi
-          - x86_64-linux-android
-          - i686-linux-android
         include:
           - target: aarch64-linux-android
             emulator-arch: arm64-v8a
