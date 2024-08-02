@@ -79,3 +79,4 @@ jobs:
         target: google_apis
         arch: ${{ matrix.emulator-arch }}
         script: ./run_tests_on_emulator.sh
+        emulator-options: -selinux enforcing -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
