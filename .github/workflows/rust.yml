@@ -2,7 +2,6 @@ name: CI
 
 on:
   push:
-    branches: ['main', '0.8.x']
   pull_request:
   merge_group:
   schedule:
@@ -159,6 +158,6 @@ jobs:
     - name: Set up Android Emulator and run tests
       uses: reactivecircus/android-emulator-runner@v2
       with:
-        api-level: 29
+        api-level: 21
         arch: ${{ matrix.emulator-arch }}
         script: ./run_tests_on_emulator.sh
