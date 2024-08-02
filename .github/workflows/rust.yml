@@ -63,7 +63,8 @@ jobs:
         adb wait-for-device
         while [[ -z "$(adb shell getprop sys.boot_completed | tr -d '\r')" ]]; do sleep 1; done
 
-        adb shell su 0 setenforce 1 && adb stop && adb start
+        adb shell su 0 getenforce
+        adb shell su 0 setenforce 1
 
         adb wait-for-device
         while [[ -z "$(adb shell getprop sys.boot_completed | tr -d '\r')" ]]; do sleep 1; done
