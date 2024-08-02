@@ -63,6 +63,8 @@ jobs:
         adb wait-for-device
         while [[ -z "$(adb shell getprop sys.boot_completed | tr -d '\r')" ]]; do sleep 1; done
 
+        adb shell setenforce 1
+
         any_failures=0
         for test in $(find target/${{ matrix.target }}/debug/deps/ -type f -executable ! -name "*.so" -name "*-*"); do
           adb push "$test" /data/local/tmp/
@@ -79,4 +81,3 @@ jobs:
         target: google_apis
         arch: ${{ matrix.emulator-arch }}
         script: ./run_tests_on_emulator.sh
-        emulator-options: -selinux enforcing -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
