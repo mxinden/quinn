@@ -63,7 +63,10 @@ jobs:
         adb wait-for-device
         while [[ -z "$(adb shell getprop sys.boot_completed | tr -d '\r')" ]]; do sleep 1; done
 
-        adb shell setenforce 1
+        adb shell su 0 setenforce 1 && adb stop && adb start
+
+        adb wait-for-device
+        while [[ -z "$(adb shell getprop sys.boot_completed | tr -d '\r')" ]]; do sleep 1; done
 
         any_failures=0
         for test in $(find target/${{ matrix.target }}/debug/deps/ -type f -executable ! -name "*.so" -name "*-*"); do
