@@ -55,17 +55,6 @@ jobs:
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
 
-    - name: Install seccomp-tools
-      run: sudo apt-get update && sudo apt-get install -y seccomp-tools
-
-    - name: Check for recvmmsg syscall
-      run: |
-        if seccomp-tools inspect $(pgrep -x emulator) | grep recvmmsg; then
-          echo "recvmmsg syscall is allowed"
-        else
-          echo "recvmmsg syscall is not allowed"
-        fi
-
     - name: Create emulator script
       run: |
         echo '#!/bin/bash
