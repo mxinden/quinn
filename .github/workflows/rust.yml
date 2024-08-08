@@ -33,7 +33,7 @@ jobs:
       uses: android-actions/setup-android@v2
 
     - name: Install Android NDK
-      run: sdkmanager --install "ndk;25.2.9519653"
+      run: sdkmanager --install "ndk;20.1.5948944"
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
@@ -93,6 +93,7 @@ jobs:
       uses: reactivecircus/android-emulator-runner@v2
       with:
         api-level: 29
+        ndk: 20.1.5948944
         target: google_apis
         arch: ${{ matrix.emulator-arch }}
         script: ./run_tests_on_emulator.sh
