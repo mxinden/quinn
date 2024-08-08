@@ -81,8 +81,8 @@ jobs:
     - name: Set up Android Emulator and run tests
       uses: reactivecircus/android-emulator-runner@v2
       with:
-        api-level: 29
+        api-level: 30
         ndk: 20.1.5948944
-        target: google_apis
+        target: aosp_atd
         arch: ${{ matrix.emulator-arch }}
         script: ./run_tests_on_emulator.sh
