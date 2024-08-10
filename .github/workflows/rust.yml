@@ -28,6 +28,7 @@ jobs:
       with:
         distribution: 'zulu'
         java-version: '21'
+        architecture: 'x86'
 
     - name: Install Android SDK
       uses: android-actions/setup-android@v2
