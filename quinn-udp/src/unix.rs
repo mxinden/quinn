@@ -449,8 +449,7 @@ unsafe fn recvmmsg_with_fallback(
 
     #[cfg(not(any(target_os = "freebsd", target_os = "netbsd")))]
     {
-        let ret =
-            libc::syscall(libc::SYS_recvmmsg, sockfd, msgvec, vlen, flags, timeout) as libc::c_int;
+        let ret = libc::recvmmsg(sockfd, msgvec, vlen, flags, timeout) as libc::c_int;
         if ret != -1 {
             return ret;
         }
