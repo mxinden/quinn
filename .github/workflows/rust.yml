@@ -14,6 +14,8 @@ jobs:
     strategy:
       matrix:
         include:
+          - target: x86_64-linux-android
+            emulator-arch: x86_64
           - target: i686-linux-android
             emulator-arch: x86
 
@@ -25,7 +27,7 @@ jobs:
       uses: actions/setup-java@v3
       with:
         distribution: 'zulu'
-        java-version: '19'
+        java-version: '21'
         architecture: 'x86'
 
     - name: Install Android SDK
