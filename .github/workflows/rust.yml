@@ -145,6 +145,7 @@ jobs:
     - name: Set up Android Emulator and run tests
       env:
         TARGET: ${{ matrix.target }}
+        RUST_LOG: "trace"
       uses: reactivecircus/android-emulator-runner@v2
       with:
         api-level: ${{ matrix.api-level }}
