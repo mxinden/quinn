@@ -101,10 +101,10 @@ jobs:
             emulator-arch: x86_64
             # Note that x86_64 image is only available for API 21+. See
             # https://github.com/ReactiveCircus/android-emulator-runner?tab=readme-ov-file#configurations.
-            api-level: 30
+            api-level: 29
           - target: i686-linux-android
             emulator-arch: x86
-            api-level: 30
+            api-level: 29
 
     steps:
     - name: Checkout code
