@@ -1,5 +1,3 @@
-#![cfg_attr(not(any(target_os = "macos", target_os = "ios")), no_main)]
-
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 fn main() {
     use std::env;
@@ -21,3 +19,6 @@ fn main() {
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
 }
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+fn main() {}
