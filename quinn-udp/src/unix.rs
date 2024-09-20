@@ -29,6 +29,11 @@ use super::{
     IO_ERROR_LOG_INTERVAL,
 };
 
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+type msghdr = libc::msghdr;
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+type iovec = libc::iovec;
+
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[allow(non_camel_case_types)]
 type msghdr = msghdr_x;
