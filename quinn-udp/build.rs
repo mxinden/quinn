@@ -1,9 +1,10 @@
-#![cfg(any(target_os = "macos", target_os = "ios"))]
+#![cfg_attr(not(any(target_os = "macos", target_os = "ios")), no_main)]
 
-use std::env;
-use std::path::PathBuf;
-
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn main() {
+    use std::env;
+    use std::path::PathBuf;
+
     // Generate the bindings for Apple's private `recvmsg_x` from
     // https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/socket.h.
     let bindings = bindgen::Builder::default()
