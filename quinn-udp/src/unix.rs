@@ -1,3 +1,8 @@
+#![allow(non_camel_case_types)]
+#![allow(unreachable_pub)]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+
 #[cfg(not(any(
     target_os = "macos",
     target_os = "ios",
@@ -23,6 +28,25 @@ use super::{
     cmsg, log::debug, log_sendmsg_error, EcnCodepoint, RecvMeta, Transmit, UdpSockRef,
     IO_ERROR_LOG_INTERVAL,
 };
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[allow(non_camel_case_types)]
+type msghdr = msghdr_x;
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+impl From<msghdr_x> for libc::msghdr {
+    fn from(val: msghdr_x) -> Self {
+        Self {
+            msg_name: val.msg_name,
+            msg_namelen: val.msg_namelen,
+            msg_iov: val.msg_iov as _,
+            msg_iovlen: val.msg_iovlen,
+            msg_control: val.msg_control,
+            msg_controllen: val.msg_controllen,
+            msg_flags: val.msg_flags,
+        }
+    }
+}
 
 // Defined in netinet6/in6.h on OpenBSD, this is not yet exported by the libc crate
 // directly.  See https://github.com/rust-lang/libc/issues/3704 for when we might be able to
@@ -418,12 +442,40 @@ fn recv(io: SockRef<'_>, bufs: &mut [IoSliceMut<'_>], meta: &mut [RecvMeta]) -> 
     Ok(msg_count as usize)
 }
 
-#[cfg(any(
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "openbsd",
-    target_os = "solaris",
-))]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn recv(io: SockRef<'_>, bufs: &mut [IoSliceMut<'_>], meta: &mut [RecvMeta]) -> io::Result<usize> {
+    let mut names = [MaybeUninit::<libc::sockaddr_storage>::uninit(); BATCH_SIZE];
+    let mut ctrls = [cmsg::Aligned(MaybeUninit::<[u8; CMSG_LEN]>::uninit()); BATCH_SIZE];
+    let mut hdrs = unsafe { mem::zeroed::<[msghdr_x; BATCH_SIZE]>() };
+    let max_msg_count = bufs.len().min(BATCH_SIZE);
+    for i in 0..max_msg_count {
+        prepare_recv(&mut bufs[i], &mut names[i], &mut ctrls[i], &mut hdrs[i]);
+    }
+    let msg_count = loop {
+        let n = unsafe {
+            recvmsg_x(
+                io.as_raw_fd(),
+                hdrs.as_mut_ptr(),
+                bufs.len().min(BATCH_SIZE) as _,
+                0,
+            )
+        };
+        if n == -1 {
+            let e = io::Error::last_os_error();
+            if e.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(e);
+        }
+        break n;
+    };
+    for i in 0..(msg_count as usize) {
+        meta[i] = decode_recv(&names[i], &hdrs[i].into(), hdrs[i].msg_datalen as usize);
+    }
+    Ok(msg_count as usize)
+}
+
+#[cfg(any(target_os = "openbsd", target_os = "solaris",))]
 fn recv(io: SockRef<'_>, bufs: &mut [IoSliceMut<'_>], meta: &mut [RecvMeta]) -> io::Result<usize> {
     let mut name = MaybeUninit::<libc::sockaddr_storage>::uninit();
     let mut ctrl = cmsg::Aligned(MaybeUninit::<[u8; CMSG_LEN]>::uninit());
@@ -546,15 +598,19 @@ fn prepare_recv(
     buf: &mut IoSliceMut,
     name: &mut MaybeUninit<libc::sockaddr_storage>,
     ctrl: &mut cmsg::Aligned<MaybeUninit<[u8; CMSG_LEN]>>,
-    hdr: &mut libc::msghdr,
+    hdr: &mut msghdr,
 ) {
     hdr.msg_name = name.as_mut_ptr() as _;
     hdr.msg_namelen = mem::size_of::<libc::sockaddr_storage>() as _;
-    hdr.msg_iov = buf as *mut IoSliceMut as *mut libc::iovec;
+    hdr.msg_iov = buf as *mut IoSliceMut as *mut iovec;
     hdr.msg_iovlen = 1;
     hdr.msg_control = ctrl.0.as_mut_ptr() as _;
     hdr.msg_controllen = CMSG_LEN as _;
     hdr.msg_flags = 0;
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        hdr.msg_datalen = buf.len();
+    }
 }
 
 fn decode_recv(
@@ -654,12 +710,8 @@ fn decode_recv(
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 // Chosen somewhat arbitrarily; might benefit from additional tuning.
 pub(crate) const BATCH_SIZE: usize = 32;
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-pub(crate) const BATCH_SIZE: usize = 1;
 
 #[cfg(target_os = "linux")]
 mod gso {
