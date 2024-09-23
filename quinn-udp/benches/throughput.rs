@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use quinn_udp::{RecvMeta, Transmit, UdpSocketState};
 use std::cmp::min;
-use std::{io::IoSliceMut, net::UdpSocket, slice};
+use std::{io::IoSliceMut, net::UdpSocket};
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     const TOTAL_BYTES: usize = 10 * 1024 * 1024;
@@ -27,8 +27,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     // Reverse non-blocking flag set by `UdpSocketState` to make the test non-racy
     recv.set_nonblocking(false).unwrap();
 
-    let mut receive_buffer = vec![0; MAX_BUFFER_SIZE];
-    let mut meta = RecvMeta::default();
+    let gro_segments = UdpSocketState::new((&send).into()).unwrap().gro_segments();
+    let mut receive_buffers = vec![[0; SEGMENT_SIZE]; gro_segments];
+    let mut receive_slives = receive_buffers
+        .iter_mut()
+        .map(|buf| IoSliceMut::new(buf))
+        .collect::<Vec<_>>();
+    let mut meta = vec![RecvMeta::default(); gro_segments];
 
     for gso_enabled in [false, true] {
         let mut group = c.benchmark_group(format!("gso_{}", gso_enabled));
@@ -55,14 +60,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     let mut received_segments = 0;
                     while received_segments < segments {
                         let n = recv_state
-                            .recv(
-                                (&recv).into(),
-                                &mut [IoSliceMut::new(&mut receive_buffer)],
-                                slice::from_mut(&mut meta),
-                            )
+                            .recv((&recv).into(), &mut receive_slives, &mut meta)
                             .unwrap();
-                        assert_eq!(n, 1);
-                        received_segments += meta.len / meta.stride;
+                        for i in meta.iter().take(n) {
+                            received_segments += i.len / i.stride;
+                        }
                     }
                     assert_eq!(received_segments, segments);
                 }

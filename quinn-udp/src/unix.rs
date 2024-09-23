@@ -364,33 +364,32 @@ fn send(state: &UdpSocketState, io: SockRef<'_>, transmit: &Transmit<'_>) -> io:
     let mut iovs = unsafe { mem::zeroed::<[libc::iovec; BATCH_SIZE]>() };
     let mut ctrls = [cmsg::Aligned([0u8; CMSG_LEN]); BATCH_SIZE];
     let addr = socket2::SockAddr::from(transmit.destination);
-    let max_msg_count = if let Some(segment_size) = transmit.segment_size {
-        transmit.contents.len() / segment_size
-    } else {
-        1
-    }
-    .min(BATCH_SIZE);
-    for i in 0..max_msg_count {
-        prepare_msg(
-            transmit,
-            &addr,
-            &mut hdrs[i],
-            &mut iovs[i],
-            &mut ctrls[i],
-            true,
-            state.sendmsg_einval(),
-        );
-        hdrs[i].msg_datalen = if let Some(segment_size) = transmit.segment_size {
-            if i < max_msg_count - 1 {
-                segment_size
-            } else {
-                transmit.contents.len() - segment_size * i
-            }
-        } else {
-            transmit.contents.len()
-        };
-    }
-    let n = unsafe { sendmsg_x(io.as_raw_fd(), hdrs.as_ptr(), max_msg_count as u32, 0) };
+    let segment_size = transmit.segment_size.unwrap_or(transmit.contents.len());
+    let cnt = transmit
+        .contents
+        .chunks(segment_size)
+        .enumerate()
+        .map(|(i, chunk)| {
+            prepare_msg(
+                &Transmit {
+                    destination: transmit.destination,
+                    ecn: transmit.ecn,
+                    contents: chunk,
+                    segment_size: Some(chunk.len()),
+                    src_ip: transmit.src_ip,
+                },
+                &addr,
+                &mut hdrs[i],
+                &mut iovs[i],
+                &mut ctrls[i],
+                true,
+                state.sendmsg_einval(),
+            );
+            hdrs[i].msg_datalen = chunk.len();
+        })
+        .count();
+    let n = unsafe { sendmsg_x(io.as_raw_fd(), hdrs.as_ptr(), cnt as u32, 0) };
+    // print!("o{} ", n);
     if n == -1 {
         let e = io::Error::last_os_error();
         match e.kind() {
@@ -528,6 +527,7 @@ fn recv(io: SockRef<'_>, bufs: &mut [IoSliceMut<'_>], meta: &mut [RecvMeta]) -> 
         }
         break n;
     };
+    // print!("i{} ", msg_count);
     for i in 0..(msg_count as usize) {
         meta[i] = decode_recv(&names[i], &hdrs[i], hdrs[i].msg_datalen as usize);
     }
@@ -604,7 +604,6 @@ fn prepare_msg(
         encoder.push(libc::IPPROTO_IPV6, libc::IPV6_TCLASS, ecn);
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     if let Some(segment_size) = transmit.segment_size {
         gso::set_segment_size(&mut encoder, segment_size as u16);
     }
@@ -818,16 +817,25 @@ mod gso {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod gso {
-    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+    use super::*;
+
+    pub(super) fn max_gso_segments() -> usize {
+        BATCH_SIZE
+    }
+
+    pub(super) fn set_segment_size(_encoder: &mut cmsg::Encoder<msghdr_x>, _segment_size: u16) {}
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
+mod gso {
     use super::*;
 
     pub(super) fn max_gso_segments() -> usize {
         1
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     pub(super) fn set_segment_size(_encoder: &mut cmsg::Encoder<libc::msghdr>, _segment_size: u16) {
         panic!("Setting a segment size is not supported on current platform");
     }
@@ -900,7 +908,16 @@ fn set_socket_option(
 
 const OPTION_ON: libc::c_int = 1;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod gro {
+    use super::BATCH_SIZE;
+
+    pub(super) fn gro_segments() -> usize {
+        BATCH_SIZE
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
 mod gro {
     pub(super) fn gro_segments() -> usize {
         1

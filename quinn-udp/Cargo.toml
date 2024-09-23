@@ -32,6 +32,6 @@ windows-sys = { workspace = true }
 [dev-dependencies]
 criterion = "0.5"
 
-[target.'cfg(any(target_os = "linux", target_os = "windows"))'.bench]
+[[bench]]
 name = "throughput"
 harness = false
