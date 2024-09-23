@@ -365,7 +365,6 @@ fn send(state: &UdpSocketState, io: SockRef<'_>, transmit: &Transmit<'_>) -> io:
     let mut ctrls = [cmsg::Aligned([0u8; CMSG_LEN]); BATCH_SIZE];
     let addr = socket2::SockAddr::from(transmit.destination);
     let max_msg_count = if let Some(segment_size) = transmit.segment_size {
-        panic!();
         transmit.contents.len() / segment_size
     } else {
         1
