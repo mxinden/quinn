@@ -29,7 +29,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let gro_segments = UdpSocketState::new((&send).into()).unwrap().gro_segments();
     let mut receive_buffers = vec![[0; SEGMENT_SIZE]; gro_segments];
-    let mut receive_slives = receive_buffers
+    let mut receive_slices = receive_buffers
         .iter_mut()
         .map(|buf| IoSliceMut::new(buf))
         .collect::<Vec<_>>();
@@ -60,7 +60,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     let mut received_segments = 0;
                     while received_segments < segments {
                         let n = recv_state
-                            .recv((&recv).into(), &mut receive_slives, &mut meta)
+                            .recv((&recv).into(), &mut receive_slices, &mut meta)
                             .unwrap();
                         for i in meta.iter().take(n) {
                             received_segments += i.len / i.stride;
