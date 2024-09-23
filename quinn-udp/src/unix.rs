@@ -28,7 +28,6 @@ use super::{
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[repr(C)]
 #[allow(non_camel_case_types)]
-// #[derive(Debug, Copy, Clone)]
 pub(crate) struct msghdr_x {
     pub msg_name: *mut std::ffi::c_void,
     pub msg_namelen: libc::socklen_t,
