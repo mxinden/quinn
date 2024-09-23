@@ -389,7 +389,6 @@ fn send(state: &UdpSocketState, io: SockRef<'_>, transmit: &Transmit<'_>) -> io:
         })
         .count();
     let n = unsafe { sendmsg_x(io.as_raw_fd(), hdrs.as_ptr(), cnt as u32, 0) };
-    // print!("o{} ", n);
     if n == -1 {
         let e = io::Error::last_os_error();
         match e.kind() {
@@ -527,7 +526,6 @@ fn recv(io: SockRef<'_>, bufs: &mut [IoSliceMut<'_>], meta: &mut [RecvMeta]) -> 
         }
         break n;
     };
-    // print!("i{} ", msg_count);
     for i in 0..(msg_count as usize) {
         meta[i] = decode_recv(&names[i], &hdrs[i], hdrs[i].msg_datalen as usize);
     }
