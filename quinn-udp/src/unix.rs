@@ -563,10 +563,8 @@ const CMSG_LEN: usize = 88;
 fn prepare_msg(
     transmit: &Transmit<'_>,
     dst_addr: &socket2::SockAddr,
-    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-    hdr: &mut libc::msghdr,
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    hdr: &mut msghdr_x,
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))] hdr: &mut libc::msghdr,
+    #[cfg(any(target_os = "macos", target_os = "ios"))] hdr: &mut msghdr_x,
     iov: &mut libc::iovec,
     ctrl: &mut cmsg::Aligned<[u8; CMSG_LEN]>,
     #[allow(unused_variables)] // only used on FreeBSD & macOS
