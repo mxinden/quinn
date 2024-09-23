@@ -1,8 +1,3 @@
-#![allow(non_camel_case_types)]
-#![allow(unreachable_pub)]
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
-
 #[cfg(not(any(
     target_os = "macos",
     target_os = "ios",
@@ -29,28 +24,37 @@ use super::{
     IO_ERROR_LOG_INTERVAL,
 };
 
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-type msghdr = libc::msghdr;
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-type iovec = libc::iovec;
-
+// Adapted from https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/socket.h
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+#[repr(C)]
 #[allow(non_camel_case_types)]
-type msghdr = msghdr_x;
+// #[derive(Debug, Copy, Clone)]
+pub(crate) struct msghdr_x {
+    pub msg_name: *mut std::ffi::c_void,
+    pub msg_namelen: libc::socklen_t,
+    pub msg_iov: *mut libc::iovec,
+    pub msg_iovlen: std::ffi::c_int,
+    pub msg_control: *mut std::ffi::c_void,
+    pub msg_controllen: libc::socklen_t,
+    pub msg_flags: std::ffi::c_int,
+    pub msg_datalen: usize,
+}
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-impl From<msghdr_x> for libc::msghdr {
-    fn from(val: msghdr_x) -> Self {
-        Self {
-            msg_name: val.msg_name,
-            msg_namelen: val.msg_namelen,
-            msg_iov: val.msg_iov as _,
-            msg_iovlen: val.msg_iovlen,
-            msg_control: val.msg_control,
-            msg_controllen: val.msg_controllen,
-            msg_flags: val.msg_flags,
-        }
-    }
+extern "C" {
+    fn recvmsg_x(
+        s: std::ffi::c_int,
+        msgp: *const msghdr_x,
+        cnt: std::ffi::c_uint,
+        flags: std::ffi::c_int,
+    ) -> isize;
+
+    // fn sendmsg_x(
+    //     s: std::ffi::c_int,
+    //     msgp: *const msghdr_x,
+    //     cnt: std::ffi::c_uint,
+    //     flags: std::ffi::c_int,
+    // ) -> isize;
 }
 
 // Defined in netinet6/in6.h on OpenBSD, this is not yet exported by the libc crate
@@ -475,7 +479,7 @@ fn recv(io: SockRef<'_>, bufs: &mut [IoSliceMut<'_>], meta: &mut [RecvMeta]) -> 
         break n;
     };
     for i in 0..(msg_count as usize) {
-        meta[i] = decode_recv(&names[i], &hdrs[i].into(), hdrs[i].msg_datalen as usize);
+        meta[i] = decode_recv(&names[i], &hdrs[i], hdrs[i].msg_datalen as usize);
     }
     Ok(msg_count as usize)
 }
@@ -599,28 +603,43 @@ fn prepare_msg(
     encoder.finish();
 }
 
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 fn prepare_recv(
     buf: &mut IoSliceMut,
     name: &mut MaybeUninit<libc::sockaddr_storage>,
     ctrl: &mut cmsg::Aligned<MaybeUninit<[u8; CMSG_LEN]>>,
-    hdr: &mut msghdr,
+    hdr: &mut libc::msghdr,
 ) {
     hdr.msg_name = name.as_mut_ptr() as _;
     hdr.msg_namelen = mem::size_of::<libc::sockaddr_storage>() as _;
-    hdr.msg_iov = buf as *mut IoSliceMut as *mut iovec;
+    hdr.msg_iov = buf as *mut IoSliceMut as *mut libc::iovec;
     hdr.msg_iovlen = 1;
     hdr.msg_control = ctrl.0.as_mut_ptr() as _;
     hdr.msg_controllen = CMSG_LEN as _;
     hdr.msg_flags = 0;
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    {
-        hdr.msg_datalen = buf.len();
-    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn prepare_recv(
+    buf: &mut IoSliceMut,
+    name: &mut MaybeUninit<libc::sockaddr_storage>,
+    ctrl: &mut cmsg::Aligned<MaybeUninit<[u8; CMSG_LEN]>>,
+    hdr: &mut msghdr_x,
+) {
+    hdr.msg_name = name.as_mut_ptr() as _;
+    hdr.msg_namelen = mem::size_of::<libc::sockaddr_storage>() as _;
+    hdr.msg_iov = buf as *mut IoSliceMut as *mut libc::iovec;
+    hdr.msg_iovlen = 1;
+    hdr.msg_control = ctrl.0.as_mut_ptr() as _;
+    hdr.msg_controllen = CMSG_LEN as _;
+    hdr.msg_flags = 0;
+    hdr.msg_datalen = buf.len();
 }
 
 fn decode_recv(
     name: &MaybeUninit<libc::sockaddr_storage>,
-    hdr: &libc::msghdr,
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))] hdr: &libc::msghdr,
+    #[cfg(any(target_os = "macos", target_os = "ios"))] hdr: &msghdr_x,
     len: usize,
 ) -> RecvMeta {
     let name = unsafe { name.assume_init() };
