@@ -49,12 +49,12 @@ extern "C" {
         flags: std::ffi::c_int,
     ) -> isize;
 
-    // fn sendmsg_x(
-    //     s: std::ffi::c_int,
-    //     msgp: *const msghdr_x,
-    //     cnt: std::ffi::c_uint,
-    //     flags: std::ffi::c_int,
-    // ) -> isize;
+    fn sendmsg_x(
+        s: std::ffi::c_int,
+        msgp: *const msghdr_x,
+        cnt: std::ffi::c_uint,
+        flags: std::ffi::c_int,
+    ) -> isize;
 }
 
 // Defined in netinet6/in6.h on OpenBSD, this is not yet exported by the libc crate
@@ -358,12 +358,66 @@ fn send(
     }
 }
 
-#[cfg(any(
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "openbsd",
-    target_os = "netbsd"
-))]
+#[cfg(any(target_os = "macos", target_os = "ios",))]
+fn send(state: &UdpSocketState, io: SockRef<'_>, transmit: &Transmit<'_>) -> io::Result<()> {
+    let mut hdrs = unsafe { mem::zeroed::<[msghdr_x; BATCH_SIZE]>() };
+    let mut iovs = unsafe { mem::zeroed::<[libc::iovec; BATCH_SIZE]>() };
+    let mut ctrls = [cmsg::Aligned([0u8; CMSG_LEN]); BATCH_SIZE];
+    let addr = socket2::SockAddr::from(transmit.destination);
+    let max_msg_count = if let Some(segment_size) = transmit.segment_size {
+        panic!();
+        transmit.contents.len() / segment_size
+    } else {
+        1
+    }
+    .min(BATCH_SIZE);
+    for i in 0..max_msg_count {
+        prepare_msg(
+            transmit,
+            &addr,
+            &mut hdrs[i],
+            &mut iovs[i],
+            &mut ctrls[i],
+            true,
+            state.sendmsg_einval(),
+        );
+        hdrs[i].msg_datalen = if let Some(segment_size) = transmit.segment_size {
+            if i < max_msg_count - 1 {
+                segment_size
+            } else {
+                transmit.contents.len() - segment_size * i
+            }
+        } else {
+            transmit.contents.len()
+        };
+    }
+    let n = unsafe { sendmsg_x(io.as_raw_fd(), hdrs.as_ptr(), max_msg_count as u32, 0) };
+    if n == -1 {
+        let e = io::Error::last_os_error();
+        match e.kind() {
+            io::ErrorKind::Interrupted => {
+                // Retry the transmission
+            }
+            io::ErrorKind::WouldBlock => return Err(e),
+            _ => {
+                // Other errors are ignored, since they will usually be handled
+                // by higher level retransmits and timeouts.
+                // - PermissionDenied errors have been observed due to iptable rules.
+                //   Those are not fatal errors, since the
+                //   configuration can be dynamically changed.
+                // - Destination unreachable errors have been observed for other
+                // - EMSGSIZE is expected for MTU probes. Future work might be able to avoid
+                //   these by automatically clamping the MTUD upper bound to the interface MTU.
+                if e.raw_os_error() != Some(libc::EMSGSIZE) {
+                    log_sendmsg_error(&state.last_send_error, e, transmit);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "openbsd", target_os = "netbsd"))]
 fn send(state: &UdpSocketState, io: SockRef<'_>, transmit: &Transmit<'_>) -> io::Result<()> {
     let mut hdr: libc::msghdr = unsafe { mem::zeroed() };
     let mut iov: libc::iovec = unsafe { mem::zeroed() };
@@ -375,10 +429,7 @@ fn send(state: &UdpSocketState, io: SockRef<'_>, transmit: &Transmit<'_>) -> io:
         &mut hdr,
         &mut iov,
         &mut ctrl,
-        cfg!(target_os = "macos")
-            || cfg!(target_os = "ios")
-            || cfg!(target_os = "openbsd")
-            || cfg!(target_os = "netbsd"),
+        true,
         state.sendmsg_einval(),
     );
     let n = unsafe { libc::sendmsg(io.as_raw_fd(), &hdr, 0) };
@@ -513,7 +564,10 @@ const CMSG_LEN: usize = 88;
 fn prepare_msg(
     transmit: &Transmit<'_>,
     dst_addr: &socket2::SockAddr,
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     hdr: &mut libc::msghdr,
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    hdr: &mut msghdr_x,
     iov: &mut libc::iovec,
     ctrl: &mut cmsg::Aligned<[u8; CMSG_LEN]>,
     #[allow(unused_variables)] // only used on FreeBSD & macOS
@@ -553,6 +607,7 @@ fn prepare_msg(
         encoder.push(libc::IPPROTO_IPV6, libc::IPV6_TCLASS, ecn);
     }
 
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     if let Some(segment_size) = transmit.segment_size {
         gso::set_segment_size(&mut encoder, segment_size as u16);
     }
@@ -768,12 +823,14 @@ mod gso {
 
 #[cfg(not(target_os = "linux"))]
 mod gso {
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     use super::*;
 
     pub(super) fn max_gso_segments() -> usize {
         1
     }
 
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     pub(super) fn set_segment_size(_encoder: &mut cmsg::Encoder<libc::msghdr>, _segment_size: u16) {
         panic!("Setting a segment size is not supported on current platform");
     }
