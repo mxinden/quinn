@@ -517,14 +517,16 @@ fn recv(io: SockRef<'_>, bufs: &mut [IoSliceMut<'_>], meta: &mut [RecvMeta]) -> 
                 0,
             )
         };
-        if n == -1 {
-            let e = io::Error::last_os_error();
-            if e.kind() == io::ErrorKind::Interrupted {
-                continue;
+        match n {
+            -1 => {
+                let e = io::Error::last_os_error();
+                if e.kind() == io::ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(e);
             }
-            return Err(e);
+            n => break n,
         }
-        break n;
     };
     for i in 0..(msg_count as usize) {
         meta[i] = decode_recv(&names[i], &hdrs[i], hdrs[i].msg_datalen as usize);
