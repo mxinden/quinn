@@ -17,6 +17,9 @@ use std::{
     time::Instant,
 };
 
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+use std::ffi::{c_int, c_uint, c_void};
+
 use socket2::SockRef;
 
 use super::{
@@ -29,31 +32,21 @@ use super::{
 #[repr(C)]
 #[allow(non_camel_case_types)]
 pub(crate) struct msghdr_x {
-    pub msg_name: *mut std::ffi::c_void,
+    pub msg_name: *mut c_void,
     pub msg_namelen: libc::socklen_t,
     pub msg_iov: *mut libc::iovec,
-    pub msg_iovlen: std::ffi::c_int,
-    pub msg_control: *mut std::ffi::c_void,
+    pub msg_iovlen: c_int,
+    pub msg_control: *mut c_void,
     pub msg_controllen: libc::socklen_t,
-    pub msg_flags: std::ffi::c_int,
+    pub msg_flags: c_int,
     pub msg_datalen: usize,
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 extern "C" {
-    fn recvmsg_x(
-        s: std::ffi::c_int,
-        msgp: *const msghdr_x,
-        cnt: std::ffi::c_uint,
-        flags: std::ffi::c_int,
-    ) -> isize;
+    fn recvmsg_x(s: c_int, msgp: *const msghdr_x, cnt: c_uint, flags: c_int) -> isize;
 
-    fn sendmsg_x(
-        s: std::ffi::c_int,
-        msgp: *const msghdr_x,
-        cnt: std::ffi::c_uint,
-        flags: std::ffi::c_int,
-    ) -> isize;
+    fn sendmsg_x(s: c_int, msgp: *const msghdr_x, cnt: c_uint, flags: c_int) -> isize;
 }
 
 // Defined in netinet6/in6.h on OpenBSD, this is not yet exported by the libc crate
@@ -364,49 +357,47 @@ fn send(state: &UdpSocketState, io: SockRef<'_>, transmit: &Transmit<'_>) -> io:
     let mut ctrls = [cmsg::Aligned([0u8; CMSG_LEN]); BATCH_SIZE];
     let addr = socket2::SockAddr::from(transmit.destination);
     let segment_size = transmit.segment_size.unwrap_or(transmit.contents.len());
-    let cnt = transmit
-        .contents
-        .chunks(segment_size)
-        .enumerate()
-        .map(|(i, chunk)| {
-            prepare_msg(
-                &Transmit {
-                    destination: transmit.destination,
-                    ecn: transmit.ecn,
-                    contents: chunk,
-                    segment_size: Some(chunk.len()),
-                    src_ip: transmit.src_ip,
-                },
-                &addr,
-                &mut hdrs[i],
-                &mut iovs[i],
-                &mut ctrls[i],
-                true,
-                state.sendmsg_einval(),
-            );
-            hdrs[i].msg_datalen = chunk.len();
-        })
-        .count();
+    let mut cnt = 0;
+    for (i, chunk) in transmit.contents.chunks(segment_size).enumerate() {
+        prepare_msg(
+            &Transmit {
+                destination: transmit.destination,
+                ecn: transmit.ecn,
+                contents: chunk,
+                segment_size: Some(chunk.len()),
+                src_ip: transmit.src_ip,
+            },
+            &addr,
+            &mut hdrs[i],
+            &mut iovs[i],
+            &mut ctrls[i],
+            true,
+            state.sendmsg_einval(),
+        );
+        hdrs[i].msg_datalen = chunk.len();
+        cnt += 1;
+    }
     let n = unsafe { sendmsg_x(io.as_raw_fd(), hdrs.as_ptr(), cnt as u32, 0) };
-    if n == -1 {
-        let e = io::Error::last_os_error();
-        match e.kind() {
-            io::ErrorKind::Interrupted => {
-                // Retry the transmission
-            }
-            io::ErrorKind::WouldBlock => return Err(e),
-            _ => {
-                // Other errors are ignored, since they will usually be handled
-                // by higher level retransmits and timeouts.
-                // - PermissionDenied errors have been observed due to iptable rules.
-                //   Those are not fatal errors, since the
-                //   configuration can be dynamically changed.
-                // - Destination unreachable errors have been observed for other
-                // - EMSGSIZE is expected for MTU probes. Future work might be able to avoid
-                //   these by automatically clamping the MTUD upper bound to the interface MTU.
-                if e.raw_os_error() != Some(libc::EMSGSIZE) {
-                    log_sendmsg_error(&state.last_send_error, e, transmit);
-                }
+    if n >= 0 {
+        return Ok(());
+    }
+    let e = io::Error::last_os_error();
+    match e.kind() {
+        io::ErrorKind::Interrupted => {
+            // Retry the transmission
+        }
+        io::ErrorKind::WouldBlock => return Err(e),
+        _ => {
+            // Other errors are ignored, since they will usually be handled
+            // by higher level retransmits and timeouts.
+            // - PermissionDenied errors have been observed due to iptable rules.
+            //   Those are not fatal errors, since the
+            //   configuration can be dynamically changed.
+            // - Destination unreachable errors have been observed for other
+            // - EMSGSIZE is expected for MTU probes. Future work might be able to avoid
+            //   these by automatically clamping the MTUD upper bound to the interface MTU.
+            if e.raw_os_error() != Some(libc::EMSGSIZE) {
+                log_sendmsg_error(&state.last_send_error, e, transmit);
             }
         }
     }
@@ -817,6 +808,9 @@ mod gso {
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+// On Apple platforms using the `sendmsg_x` call, UDP datagram segmentation is not
+// offloaded to the NIC or even the kernel, but instead done here in user space in
+// [`send`]) and then passed to the OS as individual `iovec`s (up to `BATCH_SIZE`).
 mod gso {
     use super::*;
 
@@ -908,6 +902,9 @@ fn set_socket_option(
 const OPTION_ON: libc::c_int = 1;
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+// On Apple platforms using the `recvmsg_x` call, UDP datagram reassembly is not
+// offloaded to the NIC or even the kernel; [`recv`] will instead return multiple
+// individual `iovec`s (up to `BATCH_SIZE`).
 mod gro {
     use super::BATCH_SIZE;
 
