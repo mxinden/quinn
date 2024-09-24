@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use quinn_udp::{RecvMeta, Transmit, UdpSocketState};
+use quinn_udp::{RecvMeta, Transmit, UdpSocketState, BATCH_SIZE};
 use std::cmp::min;
 use std::{io::IoSliceMut, net::UdpSocket};
 
@@ -27,13 +27,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     // Reverse non-blocking flag set by `UdpSocketState` to make the test non-racy
     recv.set_nonblocking(false).unwrap();
 
-    let gro_segments = UdpSocketState::new((&send).into()).unwrap().gro_segments();
-    let mut receive_buffers = vec![[0; SEGMENT_SIZE]; gro_segments];
+    let mut receive_buffers = vec![[0; SEGMENT_SIZE]; BATCH_SIZE];
     let mut receive_slices = receive_buffers
         .iter_mut()
         .map(|buf| IoSliceMut::new(buf))
         .collect::<Vec<_>>();
-    let mut meta = vec![RecvMeta::default(); gro_segments];
+    let mut meta = vec![RecvMeta::default(); BATCH_SIZE];
 
     for gso_enabled in [false, true] {
         let mut group = c.benchmark_group(format!("gso_{}", gso_enabled));

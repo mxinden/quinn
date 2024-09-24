@@ -901,19 +901,7 @@ fn set_socket_option(
 
 const OPTION_ON: libc::c_int = 1;
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-// On Apple platforms using the `recvmsg_x` call, UDP datagram reassembly is not
-// offloaded to the NIC or even the kernel; [`recv`] will instead return multiple
-// individual `iovec`s (up to `BATCH_SIZE`).
-mod gro {
-    use super::BATCH_SIZE;
-
-    pub(super) fn gro_segments() -> usize {
-        BATCH_SIZE
-    }
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
+#[cfg(not(target_os = "linux"))]
 mod gro {
     pub(super) fn gro_segments() -> usize {
         1
