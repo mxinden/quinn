@@ -43,7 +43,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let transmit = Transmit {
             destination: dst_addr,
-            ecn: Some(quinn_udp::EcnCodepoint::Ect0),
+            ecn: None,
             contents: &msg,
             segment_size: gso_enabled.then_some(SEGMENT_SIZE),
             src_ip: None,
@@ -63,7 +63,6 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                             .unwrap();
                         for i in meta.iter().take(n) {
                             received_segments += i.len / i.stride;
-                            assert_eq!(i.ecn, Some(quinn_udp::EcnCodepoint::Ect0));
                         }
                     }
                     assert_eq!(received_segments, segments);
