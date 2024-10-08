@@ -358,7 +358,8 @@ fn send(state: &UdpSocketState, io: SockRef<'_>, transmit: &Transmit<'_>) -> io:
     let addr = socket2::SockAddr::from(transmit.destination);
     let segment_size = transmit.segment_size.unwrap_or(transmit.contents.len());
     let mut cnt = 0;
-    for (i, chunk) in transmit.contents.chunks(segment_size).enumerate() {
+    debug_assert!(transmit.contents.div_ceil(segment_size) <= BATCH_SIZE);
+    for (i, chunk) in transmit.contents.chunks(segment_size).enumerate().take(BATCH_SIZE) {
         prepare_msg(
             &Transmit {
                 destination: transmit.destination,
