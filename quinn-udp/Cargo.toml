@@ -18,6 +18,8 @@ default = ["tracing", "log"]
 # Configure `tracing` to log events via `log` if no `tracing` subscriber exists.
 log = ["tracing/log"]
 direct-log = ["dep:log"]
+# Use private Apple APIs to send multiple packets in a single syscall.
+fast-apple-datapath = []
 
 [dependencies]
 libc = "0.2.158"
