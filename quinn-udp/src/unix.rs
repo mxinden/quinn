@@ -808,10 +808,10 @@ mod gso {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
 // On Apple platforms using the `sendmsg_x` call, UDP datagram segmentation is not
 // offloaded to the NIC or even the kernel, but instead done here in user space in
 // [`send`]) and then passed to the OS as individual `iovec`s (up to `BATCH_SIZE`).
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod gso {
     use super::*;
 
