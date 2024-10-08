@@ -27,7 +27,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     // Reverse non-blocking flag set by `UdpSocketState` to make the test non-racy
     recv.set_nonblocking(false).unwrap();
 
-    let mut receive_buffers = vec![[0; SEGMENT_SIZE * recv.gro_segments]; BATCH_SIZE];
+    let mut receive_buffers = vec![vec![0; SEGMENT_SIZE * recv_state.gro_segments()]; BATCH_SIZE];
     let mut receive_slices = receive_buffers
         .iter_mut()
         .map(|buf| IoSliceMut::new(buf))
