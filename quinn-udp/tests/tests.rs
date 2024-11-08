@@ -251,6 +251,8 @@ fn ip_to_v6_mapped(x: IpAddr) -> IpAddr {
 
 #[test]
 fn large_gro() {
+    tracing_subscriber::fmt::init();
+
     let send = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
     let recv = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
     let dst_addr = recv.local_addr().unwrap();
@@ -273,6 +275,8 @@ fn large_gro() {
     recv.set_nonblocking(false).unwrap();
 
     send_state.send(send.into(), &transmit).unwrap();
+
+    std::thread::sleep(std::time::Duration::from_secs(1));
 
     let mut buf = [0; u16::MAX as usize];
     let mut meta = RecvMeta::default();

@@ -107,7 +107,7 @@ impl UdpSocketState {
         }
 
         // Opportunistically try to enable GRO
-        _ = set_socket_option(
+        set_socket_option(
             &*socket.0,
             WinSock::IPPROTO_UDP,
             WinSock::UDP_RECV_MAX_COALESCED_SIZE,
@@ -115,7 +115,7 @@ impl UdpSocketState {
             // https://learn.microsoft.com/en-us/windows/win32/winsock/ipproto-udp-socket-options.
             // Choice of 2^16 - 1 inspired by msquic.
             u16::MAX as u32,
-        );
+        )?;
 
         let now = Instant::now();
         Ok(Self {
@@ -157,6 +157,7 @@ impl UdpSocketState {
         bufs: &mut [IoSliceMut<'_>],
         meta: &mut [RecvMeta],
     ) -> io::Result<usize> {
+        debug!("recv");
         let wsa_recvmsg_ptr = WSARECVMSG_PTR.expect("valid function pointer for WSARecvMsg");
 
         // we cannot use [`socket2::MsgHdrMut`] as we do not have access to inner field which holds the WSAMSG
@@ -239,6 +240,7 @@ impl UdpSocketState {
                     // Has type u32 (aka DWORD) per
                     // https://learn.microsoft.com/en-us/windows/win32/winsock/ipproto-udp-socket-options
                     stride = unsafe { cmsg::decode::<u32, WinSock::CMSGHDR>(cmsg) };
+                    debug!("stride set to {stride}");
                 }
                 _ => {}
             }
