@@ -248,3 +248,43 @@ fn ip_to_v6_mapped(x: IpAddr) -> IpAddr {
         IpAddr::V6(_) => x,
     }
 }
+
+#[test]
+fn large_gro() {
+    let send = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+    let recv = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+    let dst_addr = recv.local_addr().unwrap();
+    let send: &Socket = &send.into();
+    let recv: &Socket = &recv.into();
+    let send_state = UdpSocketState::new(send.into()).unwrap();
+    let recv_state = UdpSocketState::new(recv.into()).unwrap();
+
+    let msg = vec![0xAB; 3848];
+    let transmit = Transmit {
+        destination: dst_addr,
+        ecn: None,
+        contents: &msg,
+        segment_size: Some(1280),
+        src_ip: None,
+    };
+
+    // Reverse non-blocking flag set by `UdpSocketState` to make the test non-racy
+    send.set_nonblocking(false).unwrap();
+    recv.set_nonblocking(false).unwrap();
+
+    send_state.send(send.into(), &transmit).unwrap();
+
+    let mut buf = [0; u16::MAX as usize];
+    let mut meta = RecvMeta::default();
+    let n = recv_state
+        .recv(
+            recv.into(),
+            &mut [IoSliceMut::new(&mut buf)],
+            slice::from_mut(&mut meta),
+        )
+        .unwrap();
+
+    assert_eq!(n, 1);
+    assert_eq!(meta.stride, 1280);
+    assert_eq!(meta.len, 3848);
+}
