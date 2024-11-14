@@ -212,6 +212,7 @@ impl UdpSocketState {
 
         let cmsg_iter = unsafe { cmsg::Iter::new(&wsa_msg) };
         for cmsg in cmsg_iter {
+            debug!("cmsg_iter {} {}", cmsg.cmsg_level, cmsg.cmsg_type);
             const UDP_COALESCED_INFO: i32 = WinSock::UDP_COALESCED_INFO as i32;
             // [header (len)][data][padding(len + sizeof(data))] -> [header][data][padding]
             match (cmsg.cmsg_level, cmsg.cmsg_type) {
@@ -400,7 +401,7 @@ fn set_socket_option(
 
 pub(crate) const BATCH_SIZE: usize = 1;
 // Enough to store max(IP_PKTINFO + IP_ECN, IPV6_PKTINFO + IPV6_ECN) + max(UDP_SEND_MSG_SIZE, UDP_COALESCED_INFO) bytes (header + data) and some extra margin
-const CMSG_LEN: usize = 128;
+const CMSG_LEN: usize = 512;
 const OPTION_ON: u32 = 1;
 
 // FIXME this could use [`std::sync::OnceLock`] once the MSRV is bumped to 1.70 and upper

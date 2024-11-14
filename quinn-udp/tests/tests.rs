@@ -274,7 +274,7 @@ fn large_gro() {
     send.set_nonblocking(false).unwrap();
     recv.set_nonblocking(false).unwrap();
 
-    send_state.send(send.into(), &transmit).unwrap();
+    send_state.try_send(send.into(), &transmit).unwrap();
 
     std::thread::sleep(std::time::Duration::from_secs(1));
 
