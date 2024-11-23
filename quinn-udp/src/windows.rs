@@ -108,15 +108,32 @@ impl UdpSocketState {
         }
 
         // Opportunistically try to enable GRO
-        _ = set_socket_option(
+        //
+        // u32 per
+        // https://learn.microsoft.com/en-us/windows/win32/winsock/ipproto-udp-socket-options.
+        // Choice of 2^16 - 1 inspired by msquic.
+        let size = u16::MAX as u32 - 8;
+        set_socket_option(
             &*socket.0,
             WinSock::IPPROTO_UDP,
             WinSock::UDP_RECV_MAX_COALESCED_SIZE,
-            // u32 per
-            // https://learn.microsoft.com/en-us/windows/win32/winsock/ipproto-udp-socket-options.
-            // Choice of 2^16 - 1 inspired by msquic.
-            u16::MAX as u32,
-        );
+            size,
+        )?;
+        let mut result: u32 = 0;
+        let mut len = mem::size_of_val(&result) as i32;
+        let rc = unsafe {
+            WinSock::getsockopt(
+                socket.0.as_raw_socket() as _,
+                WinSock::IPPROTO_UDP,
+                WinSock::UDP_RECV_MAX_COALESCED_SIZE as _,
+                &mut result as *mut _ as _,
+                &mut len,
+            )
+        };
+        if rc == -1 {
+            return Err(io::Error::last_os_error());
+        }
+        assert_eq!(result, size);
 
         let now = Instant::now();
         Ok(Self {
@@ -241,7 +258,9 @@ impl UdpSocketState {
                     // https://learn.microsoft.com/en-us/windows/win32/winsock/ipproto-udp-socket-options
                     stride = unsafe { cmsg::decode::<u32, WinSock::CMSGHDR>(cmsg) };
                 }
-                _ => {}
+                x => {
+                    println!("Unexpected cmsg {x:?}");
+                }
             }
         }
 
@@ -252,6 +271,10 @@ impl UdpSocketState {
             ecn: EcnCodepoint::from_bits(ecn_bits as u8),
             dst_ip,
         };
+
+        if stride > 1_500 && len == stride {
+            panic!("Got un-coalesced UDP datagram > 1_500 bytes. {:?}", meta[0]);
+        }
         Ok(1)
     }
 
@@ -399,7 +422,7 @@ fn set_socket_option(
 
 pub(crate) const BATCH_SIZE: usize = 1;
 // Enough to store max(IP_PKTINFO + IP_ECN, IPV6_PKTINFO + IPV6_ECN) + max(UDP_SEND_MSG_SIZE, UDP_COALESCED_INFO) bytes (header + data) and some extra margin
-const CMSG_LEN: usize = 128;
+const CMSG_LEN: usize = 512;
 const OPTION_ON: u32 = 1;
 
 // FIXME this could use [`std::sync::OnceLock`] once the MSRV is bumped to 1.70 and upper
