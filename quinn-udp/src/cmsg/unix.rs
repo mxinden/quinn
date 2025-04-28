@@ -37,13 +37,11 @@ impl MsgHdr for crate::imp::msghdr_x {
     type ControlMessage = libc::cmsghdr;
 
     fn cmsg_first_hdr(&self) -> *mut Self::ControlMessage {
-        let selfp = self as *const _ as *mut libc::msghdr;
-        unsafe { libc::CMSG_FIRSTHDR(selfp) }
+        unsafe { crate::imp::CMSG_FIRSTHDR(self) }
     }
 
     fn cmsg_nxt_hdr(&self, cmsg: &Self::ControlMessage) -> *mut Self::ControlMessage {
-        let selfp = self as *const _ as *mut libc::msghdr;
-        let next = unsafe { libc::CMSG_NXTHDR(selfp, cmsg) };
+        let next = unsafe { crate::imp::CMSG_NXTHDR(self, cmsg) };
 
         // On MacOS < 14 CMSG_NXTHDR might continuously return a zeroed cmsg. In
         // such case, return a null pointer instead, thus indicating the end of

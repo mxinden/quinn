@@ -48,6 +48,13 @@ extern "C" {
         cnt: libc::c_uint,
         flags: libc::c_int,
     ) -> isize;
+
+    pub(crate) fn CMSG_FIRSTHDR(mhdr: *const msghdr_x) -> *mut libc::cmsghdr;
+
+    pub(crate) fn CMSG_NXTHDR(
+        mhdr: *const msghdr_x,
+        cmsg: *const libc::cmsghdr,
+    ) -> *mut libc::cmsghdr;
 }
 
 // Defined in netinet6/in6.h on OpenBSD, this is not yet exported by the libc crate
