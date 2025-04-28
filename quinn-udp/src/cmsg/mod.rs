@@ -99,6 +99,7 @@ impl<'a, M: MsgHdr> Iter<'a, M> {
     /// lifetime of the constructed `Iter` and contains a buffer of native cmsgs, i.e. is aligned
     //  for native `cmsghdr`, is fully initialized, and has correct internal links.
     pub(crate) unsafe fn new(hdr: &'a M) -> Self {
+        dbg!(hdr.control_len());
         Self {
             hdr,
             cmsg: hdr.cmsg_first_hdr().as_ref(),
@@ -111,6 +112,8 @@ impl<'a, M: MsgHdr> Iterator for Iter<'a, M> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let current = self.cmsg.take()?;
+        dbg!(current.len());
+        dbg!(self.hdr.control_len());
         self.cmsg = unsafe { self.hdr.cmsg_nxt_hdr(current).as_ref() };
 
         #[cfg(apple_fast)]

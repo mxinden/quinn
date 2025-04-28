@@ -509,7 +509,7 @@ fn recv(io: SockRef<'_>, bufs: &mut [IoSliceMut<'_>], meta: &mut [RecvMeta]) -> 
     let mut ctrls = [cmsg::Aligned(MaybeUninit::<[u8; CMSG_LEN]>::uninit()); BATCH_SIZE];
     let mut hdrs = unsafe { mem::zeroed::<[msghdr_x; BATCH_SIZE]>() };
     let max_msg_count = bufs.len().min(BATCH_SIZE);
-    for i in 0..max_msg_count {
+    for i in 0..dbg!(max_msg_count) {
         prepare_recv(&mut bufs[i], &mut names[i], &mut ctrls[i], &mut hdrs[i]);
     }
     let msg_count = loop {
@@ -526,7 +526,8 @@ fn recv(io: SockRef<'_>, bufs: &mut [IoSliceMut<'_>], meta: &mut [RecvMeta]) -> 
             _ => return Err(e),
         }
     };
-    for i in 0..(msg_count as usize) {
+    for i in 0..(dbg!(msg_count) as usize) {
+        dbg!(i);
         meta[i] = decode_recv(&names[i], &hdrs[i], hdrs[i].msg_datalen as usize);
     }
     Ok(msg_count as usize)
@@ -693,6 +694,7 @@ fn decode_recv(
     #[cfg(apple_fast)] hdr: &msghdr_x,
     len: usize,
 ) -> RecvMeta {
+    dbg!("decode_recv");
     let name = unsafe { name.assume_init() };
     let mut ecn_bits = 0;
     let mut dst_ip = None;
@@ -701,16 +703,19 @@ fn decode_recv(
 
     let cmsg_iter = unsafe { cmsg::Iter::new(hdr) };
     for cmsg in cmsg_iter {
-        match (cmsg.cmsg_level, cmsg.cmsg_type) {
+        match (dbg!(cmsg.cmsg_level), dbg!(cmsg.cmsg_type)) {
             (libc::IPPROTO_IP, libc::IP_TOS) => unsafe {
+                dbg!("(libc::IPPROTO_IP, libc::IP_TOS)");
                 ecn_bits = cmsg::decode::<u8, libc::cmsghdr>(cmsg);
             },
             // FreeBSD uses IP_RECVTOS here, and we can be liberal because cmsgs are opt-in.
             #[cfg(not(any(target_os = "openbsd", target_os = "netbsd", solarish)))]
             (libc::IPPROTO_IP, libc::IP_RECVTOS) => unsafe {
+                dbg!("(libc::IPPROTO_IP, libc::IP_RECVTOS)");
                 ecn_bits = cmsg::decode::<u8, libc::cmsghdr>(cmsg);
             },
             (libc::IPPROTO_IPV6, libc::IPV6_TCLASS) => unsafe {
+                dbg!("(libc::IPPROTO_IPV6, libc::IPV6_TCLASS)");
                 // Temporary hack around broken macos ABI. Remove once upstream fixes it.
                 // https://bugreport.apple.com/web/?problemID=48761855
                 #[allow(clippy::unnecessary_cast)] // cmsg.cmsg_len defined as size_t
@@ -724,6 +729,7 @@ fn decode_recv(
             },
             #[cfg(any(target_os = "linux", target_os = "android"))]
             (libc::IPPROTO_IP, libc::IP_PKTINFO) => {
+                dbg!("(libc::IPPROTO_IP, libc::IP_PKTINFO)");
                 let pktinfo = unsafe { cmsg::decode::<libc::in_pktinfo, libc::cmsghdr>(cmsg) };
                 dst_ip = Some(IpAddr::V4(Ipv4Addr::from(
                     pktinfo.ipi_addr.s_addr.to_ne_bytes(),
@@ -731,15 +737,18 @@ fn decode_recv(
             }
             #[cfg(any(bsd, apple))]
             (libc::IPPROTO_IP, libc::IP_RECVDSTADDR) => {
+                dbg!("(libc::IPPROTO_IP, libc::IP_RECVDSTADDR)");
                 let in_addr = unsafe { cmsg::decode::<libc::in_addr, libc::cmsghdr>(cmsg) };
                 dst_ip = Some(IpAddr::V4(Ipv4Addr::from(in_addr.s_addr.to_ne_bytes())));
             }
             (libc::IPPROTO_IPV6, libc::IPV6_PKTINFO) => {
+                dbg!("(libc::IPPROTO_IPV6, libc::IPV6_PKTINFO)");
                 let pktinfo = unsafe { cmsg::decode::<libc::in6_pktinfo, libc::cmsghdr>(cmsg) };
                 dst_ip = Some(IpAddr::V6(Ipv6Addr::from(pktinfo.ipi6_addr.s6_addr)));
             }
             #[cfg(any(target_os = "linux", target_os = "android"))]
             (libc::SOL_UDP, gro::UDP_GRO) => unsafe {
+                dbg!("(libc::SOL_UDP, gro::UDP_GRO)");
                 stride = cmsg::decode::<libc::c_int, libc::cmsghdr>(cmsg) as usize;
             },
             _ => {}
