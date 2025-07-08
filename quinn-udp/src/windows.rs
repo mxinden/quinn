@@ -254,6 +254,7 @@ impl UdpSocketState {
                     ecn_bits = unsafe { cmsg::decode::<c_int, WinSock::CMSGHDR>(cmsg) };
                 }
                 (WinSock::IPPROTO_UDP, UDP_COALESCED_INFO) => {
+                    panic!("UDP_COALESCED_INFO");
                     // Has type u32 (aka DWORD) per
                     // https://learn.microsoft.com/en-us/windows/win32/winsock/ipproto-udp-socket-options
                     stride = unsafe { cmsg::decode::<u32, WinSock::CMSGHDR>(cmsg) };

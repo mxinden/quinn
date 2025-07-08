@@ -285,6 +285,10 @@ fn socket_buffers() {
 fn test_send_recv(send: &Socket, recv: &Socket, transmit: Transmit) {
     let send_state = UdpSocketState::new(send.into()).unwrap();
     let recv_state = UdpSocketState::new(recv.into()).unwrap();
+    #[cfg(windows)]
+    {
+        recv_state.set_gro(recv.into(), true).unwrap();
+    }
 
     // Reverse non-blocking flag set by `UdpSocketState` to make the test non-racy
     recv.set_nonblocking(false).unwrap();
