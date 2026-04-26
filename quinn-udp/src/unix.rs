@@ -212,7 +212,28 @@ impl UdpSocketState {
     /// If you would like to handle these errors yourself, use [`UdpSocketState::try_send`]
     /// instead.
     pub fn send(&self, socket: UdpSockRef<'_>, transmit: &Transmit<'_>) -> io::Result<()> {
-        match send(self, socket.0, transmit) {
+        #[cfg(not(apple))]
+        let result = send(self, socket.0, transmit);
+
+        // On Apple platforms, ENOBUFS signals kernel buffer exhaustion. kqueue does not
+        // re-signal writability after this error, so callers must not map it to WouldBlock.
+        // Retry with exponential backoff instead, giving the kernel time to drain buffers.
+        #[cfg(apple)]
+        let result = {
+            use std::os::fd::AsFd;
+            let fd = socket.0.as_fd();
+            let mut r = send(self, SockRef::from(&fd), transmit);
+            for attempt in 0u32..20 {
+                if !matches!(&r, Err(e) if e.raw_os_error() == Some(libc::ENOBUFS)) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_nanos(1u64 << attempt));
+                r = send(self, SockRef::from(&fd), transmit);
+            }
+            r
+        };
+
+        match result {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => Err(e),
             // - EMSGSIZE is expected for MTU probes. Future work might be able to avoid
